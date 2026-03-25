@@ -6,7 +6,6 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        // On utilise ton repo
         git branch: 'main', url: 'https://github.com/fapcent/devops-demo-project.git'
       }
     }
@@ -26,15 +25,17 @@ pipeline {
       }
     }
     stage('Build and Push Docker Image') {
-      environment {
-        DOCKER_IMAGE = "fapcent/demo-java-app:${params.build_version}"
-      }
       steps {
         script {
-            sh 'cd demo-java-app && docker build -t ${DOCKER_IMAGE} .'
-            // Connexion et push sur ton DockerHub fapcent
-            docker.withRegistry('https://index.docker.io/v1/', "dockerhub") {
-                docker.image("${DOCKER_IMAGE}").push()
+            // On définit le nom complet de l'image
+            def imageName = "fapcent/demo-java-app:${params.build_version}"
+            
+            // Construction de l'image
+            sh "cd demo-java-app && docker build -t ${imageName} ."
+            
+            // Connexion et Push (Syntaxe simplifiée sans l'URL index.docker.io qui bug souvent)
+            docker.withRegistry('', "dockerhub") {
+                docker.image("${imageName}").push()
             }
         }
       }
@@ -42,22 +43,16 @@ pipeline {
     stage('Update Deployment File') {
         environment {
             GIT_REPO_NAME = "devops-demo-project"
-            GIT_USER_NAME = "fapcent" // CORRIGÉ : Ton pseudo GitHub
+            GIT_USER_NAME = "fapcent"
         }
         steps {
             withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                 sh '''
-                    # CORRIGÉ : Tes infos de commit
                     git config user.email "fapcent@users.noreply.github.com"
                     git config user.name "fapcent"
-                    
-                    # Mise à jour du tag dans le fichier Helm
                     sed -i "s/tag: .*/tag: \\"${build_version}\\"/" helm/app/values.yaml
-                    
                     git add helm/app/values.yaml
                     git commit -m "Update deployment image to version ${build_version}"
-                    
-                    # Push vers TON repo avec TON token
                     git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:main
                 '''
             }
